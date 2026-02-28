@@ -14,8 +14,8 @@ ProjectMenu::~ProjectMenu() {
 
 void ProjectMenu::init() {
 #if defined(__NDS__)
-    if (!SoundPlayer::isSoundLoaded("gfx/menu/mm_ds.wav")) {
-        SoundPlayer::startSoundLoaderThread(nullptr, nullptr, "gfx/menu/mm_ds.wav", false, false);
+    if (!SoundPlayer::isSoundLoaded("gfx/nds/mm_ds.wav")) {
+        SoundPlayer::startSoundLoaderThread(nullptr, nullptr, "gfx/nds/mm_ds.wav", false, false);
     }
 #else
     if (!SoundPlayer::isSoundLoaded("gfx/menu/mm_splash.ogg")) {
@@ -35,7 +35,7 @@ void ProjectMenu::init() {
     // initialize text and set positions
     int yPosition = 30;
     for (std::string &file : projectFiles) {
-        ButtonObject *project = new ButtonObject(file.substr(0, file.length() - 4), "gfx/menu/projectBox.svg", 0, yPosition, "gfx/menu/Ubuntu-Bold");
+        ButtonObject *project = new ButtonObject(file.substr(0, file.length() - 4), "gfx/menu/projectBox.svg", 0, yPosition, "gfx/menu/Ubuntu-Bold", true);
         project->text->setColor(Math::color(0, 0, 0, 255));
         project->y -= project->text->getSize()[1] / 2;
         if (project->text->getSize()[0] > project->buttonTexture->image->getWidth() * 0.85) {
@@ -55,7 +55,7 @@ void ProjectMenu::init() {
         yPosition += 50;
     }
     for (std::string &file : UnzippedFiles) {
-        ButtonObject *project = new ButtonObject(file, "gfx/menu/projectBoxFast.png", 0, yPosition, "gfx/menu/Ubuntu-Bold");
+        ButtonObject *project = new ButtonObject(file, "gfx/menu/projectBoxFast.svg", 0, yPosition, "gfx/menu/Ubuntu-Bold", true);
         project->text->setColor(Math::color(126, 101, 1, 255));
         project->y -= project->text->getSize()[1] / 2;
         if (project->text->getSize()[0] > project->buttonTexture->image->getWidth() * 0.85) {
@@ -149,8 +149,8 @@ void ProjectMenu::render() {
 
     if (!(settings.contains("MenuMusic") && settings["MenuMusic"].is_boolean() && !settings["MenuMusic"].get<bool>())) {
 #ifdef __NDS__
-        if (!SoundPlayer::isSoundPlaying("gfx/menu/mm_ds.wav")) {
-            SoundPlayer::playSound("gfx/menu/mm_ds.wav");
+        if (!SoundPlayer::isSoundPlaying("gfx/nds/mm_ds.wav")) {
+            SoundPlayer::playSound("gfx/nds/mm_ds.wav");
         }
 #else
         if (!SoundPlayer::isSoundPlaying("gfx/menu/mm_splash.ogg")) {

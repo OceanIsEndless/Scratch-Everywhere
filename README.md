@@ -23,7 +23,7 @@ over to 6-8th-generation console and handheld platforms (and more)!
 <p align="center">
 	<img alt="Runtime running a Scratch project on Wii U, Wii, and 3DS" src="docs/demo.gif" />
 	<br>
-	<sub>(Game shown is [Hopper Heros](https://scratch.mit.edu/projects/1184969400/) by pepper-prepper)</sub>
+	<sub>(Game shown is <a href="https://scratch.mit.edu/projects/1184969400">Hopper Heros</a> by pepper-prepper)</sub>
 </p>
 
 ## Controls
@@ -130,8 +130,6 @@ crashes, and things that will just not work.
 
 **List of Known Limitations:**
 
-- Text and embedded bitmap images will not show up on vector images containing
-  it.
 - Most Extensions (e.g. music extension) are not yet supported.
   - Only the `Pen`, `Text to Speech` (Wii U and 3DS only), and `Makey Makey`
     extensions are currently supported.
@@ -505,10 +503,12 @@ Then you need to compile the projects into proper Homebrew packages.
   inside the root of your Wii SD card.
 - **For the GameCube**, you need to run `make PLATFORM=gamecube`, then find the
   `.dol` file at `build/gamecube/scratch-gamecube.dol`.
-- **For the Switch**, you need to run `make PLATFORM=switch`, then find the
-  `.nro` file at `build/switch/scratch-nx.nro`.
-- **For the Vita**, run `make PLATFORM=vita`, then transfer the VPK at
-  `build/vita/scratch-vita.vpk` over to your Vita.
+- **For the Switch**, you need to run
+  `cmake -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/Switch.cmake -B build/nx && cmake --build build/nx`,
+  then find the `.nro` file at `build/nx/scratch-nx.nro`.
+- **For the Vita**, run
+  `cmake -DCMAKE_TOOLCHAIN_FILE=$VITASDK/share/vita.toolchain.cmake -B build/vita && cmake --build build/vita`,
+  then transfer the VPK at `build/vita/scratch-vita.vpk` over to your Vita.
 - **For the PSP**, run
   `psp-cmake -B build/psp -S . -DSE_SYSTEM=ON -DSE_CLOUDVARS=OFF && make -C build/psp`,
   then unzip the `scratch-psp.zip` file at `build/psp` and transfer the
