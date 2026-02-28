@@ -186,6 +186,10 @@ bool Value::isScratchInt() {
     return false;
 }
 
+bool Value::isIdenticalTo(const Value &other) const {
+    return value == other.value;
+}
+
 Value Value::fromJson(const nlohmann::json &jsonVal) {
     if (jsonVal.is_number()) return Value(jsonVal.get<double>());
     if (jsonVal.is_string()) return Value(jsonVal.get<std::string>());

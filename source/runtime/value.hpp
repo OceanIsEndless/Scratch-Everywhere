@@ -80,5 +80,7 @@ class Value {
     // Used exclusively by the random block
     bool isScratchInt();
 
+    bool isIdenticalTo(const Value &other) const;
+
     static Value fromJson(const nlohmann::json &jsonVal);
 };
