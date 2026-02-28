@@ -78,12 +78,32 @@ SCRATCH_REPORTER_BLOCK(translate, getTranslate) {
             }
         }
 
-        if (DownloadManager::isDownloading(api)) {
-            return;
-        } else {
+        if (!DownloadManager::isDownloading(api)) {
             Log::log("Translate: starting download for: " +textString + " -> " + temp);
             DownloadManager::addDownload(api, temp);
-            BlockExecutor::addToRepeatQueue(sprite, &block);
+            while (DownloadManager::isDownloading(api)) {
+                // hmmm
+            }
+
+            if (OS::fileExists(temp)) {
+                std::ifstream file(temp);
+                if (file.is_open()) {
+                    nlohmann::json output;
+                    file >> output;
+                    file.close();
+                    Value result = Value(output["result"].get<std::string>());
+                    lastText = textValue;
+                    lastLang = langValue;
+                    lastResult = result;
+                    return result;
+                } else {
+                    Log::logWarning("Failed to load translation result from " + temp);
+                    return Value("");
+                }
+            } else {
+                Log::logWarning("Failed to download from translation API");
+                return Value("");
+            }
         }
     } catch (const std::exception &e) {
         Log::logWarning(std::string("Filesystem::exists threw: ") + e.what());
