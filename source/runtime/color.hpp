@@ -10,7 +10,7 @@ struct Color {
     float brightness;
     float transparency;
     
-    bool Color::operator==(const Color &other) const {
+    bool operator==(const Color &other) const {
         return hue == other.hue && saturation == other.saturation
         && brightness == other.brightness && transparency == other.transparency;
     }
