@@ -187,7 +187,19 @@ bool Value::isScratchInt() {
 }
 
 bool Value::isIdenticalTo(const Value &other) const {
-    return value == other.value;
+    if (isDouble() && other.isDouble()) {
+        return asDouble() == other.asDouble();
+    } else if (isString() && other.isString()) {
+        return asString() == other.asString();
+    } else if (isBoolean() && other.isBoolean()) {
+        return asBoolean() == other.asBoolean();
+    } else if (isColor() && other.isColor()) {
+        return asColor() == other.asColor();
+    } else if (isUndefined() && other.isUndefined()) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 Value Value::fromJson(const nlohmann::json &jsonVal) {

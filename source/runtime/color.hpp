@@ -9,6 +9,11 @@ struct Color {
     float saturation;
     float brightness;
     float transparency;
+    
+    bool Color::operator==(const Color &other) const {
+        return hue == other.hue && saturation == other.saturation
+        && brightness == other.brightness && transparency == other.transparency;
+    }
 };
 
 struct ColorRGBA {
