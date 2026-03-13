@@ -1,19 +1,19 @@
 #pragma once
+#include "nonstd/expected.hpp"
 #include <SDL2/SDL.h>
 #include <image.hpp>
 #include <string>
-#include <unordered_map>
 
 class Image_SDL2 : public Image {
   private:
-    void setInitialTexture();
+    nonstd::expected<void, std::string> setInitialTexture();
 
   public:
     SDL_Texture *texture;
 
-    Image_SDL2(std::string filePath, bool fromScratchProject = true, bool bitmapHalfQuality = false);
+    Image_SDL2(std::string filePath, bool fromScratchProject = true, bool bitmapHalfQuality = false, float scale = 1);
 
-    Image_SDL2(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality = false);
+    Image_SDL2(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality = false, float scale = 1);
 
     ~Image_SDL2() override;
 
@@ -21,4 +21,6 @@ class Image_SDL2 : public Image {
     void renderNineslice(double xPos, double yPos, double width, double height, double padding, bool centered = false) override;
 
     void *getNativeTexture() override;
+
+    nonstd::expected<void, std::string> refreshTexture() override;
 };

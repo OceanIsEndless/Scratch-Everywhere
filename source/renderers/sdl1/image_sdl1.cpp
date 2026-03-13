@@ -1,4 +1,5 @@
 #include "image_sdl1.hpp"
+#include "nonstd/expected.hpp"
 #include "render.hpp"
 #include <SDL/SDL_gfxBlitFunc.h>
 #include <SDL/SDL_rotozoom.h>
@@ -74,6 +75,8 @@ void Image_SDL1::render(ImageRenderParams &params) {
     }
 
     SDL_Rect dest;
+    dest.w = getWidth();
+    dest.h = getHeight();
     dest.x = x;
     dest.y = y;
 
@@ -159,22 +162,32 @@ void *Image_SDL1::getNativeTexture() {
     return texture;
 }
 
-void Image_SDL1::setInitialTexture() {
-
+nonstd::expected<void, std::string> Image_SDL1::setInitialTexture() {
     texture = SDL_CreateRGBSurfaceFrom(imgData.pixels, imgData.width, imgData.height, 32, imgData.pitch, RMASK, GMASK, BMASK, AMASK);
 
     if (!texture) {
-        throw std::runtime_error(std::string("Texture creation failed: ") + SDL_GetError());
+        return nonstd::make_unexpected(std::string("Texture creation failed: ") + SDL_GetError());
     }
     SDL_SetAlpha(texture, SDL_SRCALPHA, 255);
+    return {};
 }
 
-Image_SDL1::Image_SDL1(std::string filePath, bool fromScratchProject, bool bitmapHalfQuality) : Image(filePath, fromScratchProject, bitmapHalfQuality) {
-    setInitialTexture();
+nonstd::expected<void, std::string> Image_SDL1::refreshTexture() {
+    if (texture) {
+        SDL_FreeSurface(texture);
+        texture = nullptr;
+    }
+    return setInitialTexture();
 }
 
-Image_SDL1::Image_SDL1(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality) : Image(filePath, zip, bitmapHalfQuality) {
-    setInitialTexture();
+Image_SDL1::Image_SDL1(std::string filePath, bool fromScratchProject, bool bitmapHalfQuality, float scale) : Image(filePath, fromScratchProject, bitmapHalfQuality, scale) {
+    const auto potentialError = setInitialTexture();
+    if (!potentialError.has_value()) error = potentialError.error();
+}
+
+Image_SDL1::Image_SDL1(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality, float scale) : Image(filePath, zip, bitmapHalfQuality, scale) {
+    const auto potentialError = setInitialTexture();
+    if (!potentialError.has_value()) error = potentialError.error();
 }
 
 Image_SDL1::~Image_SDL1() {

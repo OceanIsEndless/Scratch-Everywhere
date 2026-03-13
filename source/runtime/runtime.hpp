@@ -8,17 +8,27 @@
 #include <unordered_map>
 #include <vector>
 
-enum ProjectType {
+enum class ProjectType {
     UNZIPPED,
     EMBEDDED,
     UNEMBEDDED
 };
 
+#ifdef ENABLE_MENU
+class PauseMenu;
+#endif
 class BlockExecutor;
 extern BlockExecutor executor;
 
 class Scratch {
   public:
+    static void initializeScratchProject();
+
+    /**
+     * Runs a single step of execution.
+     * @return First bool for if loop should be continued, second bool for exit code
+     */
+    static std::pair<bool, bool> stepScratchProject();
     static bool startScratchProject();
     static void cleanupScratchProject();
 
@@ -73,6 +83,9 @@ class Scratch {
     static void flushCostumeImages();
     static void freeUnusedCostumeImages();
 
+    static void createDebugMonitor(const std::string &name, int x, int y);
+    static void toggleDebugVars(const bool enabled);
+
     static int projectWidth;
     static int projectHeight;
     static int FPS;
@@ -86,10 +99,19 @@ class Scratch {
     static bool shouldStop;
     static bool forceRedraw;
 
+    static bool debugVars;
+    static bool sb3InRam;
+
     static double counter;
 
     static bool nextProject;
     static Value dataNextProject;
+
+    static Timer fpsTimer;
+
+#ifdef ENABLE_MENU
+    static PauseMenu *pauseMenu;
+#endif
 
     static std::vector<Sprite *> sprites;
     static Sprite *stageSprite;

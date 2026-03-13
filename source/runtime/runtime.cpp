@@ -15,6 +15,7 @@
 #include <math.h>
 #include <os.hpp>
 #include <render.hpp>
+#include <set>
 #include <speech_manager.hpp>
 #include <string>
 #include <unordered_map>
@@ -50,6 +51,14 @@ bool Scratch::miscellaneousLimits = true;
 bool Scratch::shouldStop = false;
 bool Scratch::forceRedraw = false;
 bool Scratch::accuratePen = false;
+bool Scratch::debugVars = false;
+bool Scratch::sb3InRam = true;
+
+Timer Scratch::fpsTimer(false);
+
+#ifdef ENABLE_MENU
+PauseMenu *Scratch::pauseMenu = nullptr;
+#endif
 
 double Scratch::counter = 0;
 
@@ -61,12 +70,16 @@ std::string Scratch::customUsername;
 
 std::unordered_map<std::string, std::shared_ptr<Image>> Scratch::costumeImages;
 
-bool Scratch::startScratchProject() {
+void Scratch::initializeScratchProject() {
     Parser::loadUsernameFromSettings();
 #ifdef ENABLE_CLOUDVARS
     if (cloudProject) Parser::initMist();
 #endif
     Scratch::nextProject = false;
+
+#ifdef ENABLE_MENU
+    Scratch::pauseMenu = nullptr;
+#endif
 
 #ifdef ENABLE_CACHING
     for (auto &sprite : sprites) {
@@ -83,60 +96,108 @@ bool Scratch::startScratchProject() {
 
     Scratch::greenFlagClicked();
 
-    while (Render::appShouldRun()) {
-        const bool checkFPS = Render::checkFramerate();
-        if (Scratch::turbo) forceRedraw = false;
+    if (debugVars) fpsTimer.start();
+}
 
-        if (!forceRedraw || checkFPS) {
-            forceRedraw = false;
-            if (checkFPS) Input::getInput();
-            BlockExecutor::runCloneStarts();
-            BlockExecutor::runBroadcasts();
-            BlockExecutor::runBackdrops();
-            BlockExecutor::runRepeatBlocks();
-            BlockExecutor::updateMonitors();
-            SpeechManager *speechManager = Render::getSpeechManager();
-            if (speechManager) {
-                speechManager->update();
-            }
-            if (checkFPS) {
-                Render::renderSprites();
-                Scratch::flushCostumeImages();
-            }
+std::pair<bool, bool> Scratch::stepScratchProject() {
+    if (!Render::appShouldRun()) {
+#ifdef ENABLE_MENU
+        if (pauseMenu != nullptr) {
+            MenuManager::cleanup();
+            pauseMenu = nullptr;
+        }
+#endif
+        return std::make_pair(false, false);
+    }
+#ifdef ENABLE_MENU
+    if (pauseMenu != nullptr) {
+        MenuManager::render();
+        if (pauseMenu->shouldUnpause) {
+            MenuManager::cleanup();
+            pauseMenu = nullptr;
+        }
+        return std::make_pair(Render::appShouldRun(), false);
+    }
+#endif
+
+    const bool checkFPS = Render::checkFramerate();
+    if (Scratch::turbo) forceRedraw = false;
+
+    if (!forceRedraw || checkFPS) {
+        forceRedraw = false;
+
+        float currentFPS;
+        if (debugVars) {
+            double frameTimeMs = fpsTimer.getTimeMsDouble();
+            fpsTimer.start();
+            currentFPS = (frameTimeMs > 0) ? (1000.0f / frameTimeMs) : 0;
+        }
+
+        Timer scriptTimer(false);
+        if (debugVars) scriptTimer.start();
+
+        if (checkFPS) Input::getInput();
+        BlockExecutor::runCloneStarts();
+        BlockExecutor::runBroadcasts();
+        BlockExecutor::runBackdrops();
+        BlockExecutor::runRepeatBlocks();
+
+        if (debugVars) stageSprite->variables["SE!__ScriptTime"].value = Value(std::to_string(scriptTimer.getTimeMsDouble()) + " ms");
+
+        Timer renderTimer(false);
+        if (debugVars) renderTimer.start();
+
+        BlockExecutor::updateMonitors();
+        SpeechManager *speechManager = Render::getSpeechManager();
+        if (speechManager) {
+            speechManager->update();
+        }
+        if (checkFPS) {
+            Render::renderSprites();
+            Scratch::flushCostumeImages();
+
+            if (debugVars) stageSprite->variables["SE!__FPS"].value = Value(std::to_string(std::clamp(static_cast<int>(currentFPS), 0, FPS)));
+        }
 
 #ifdef ENABLE_MENU
 
-            if ((projectType == UNEMBEDDED || (projectType == UNZIPPED && Unzip::UnpackedInSD)) && Input::keyHeldDuration["1"] > 90 * (FPS / 30.0f)) {
-
-                PauseMenu *menu = new PauseMenu();
-                MenuManager::changeMenu(menu);
-
-                while (Render::appShouldRun()) {
-                    MenuManager::render();
-                    if (menu->shouldUnpause) break;
-
-#ifdef __EMSCRIPTEN__
-                    emscripten_sleep(0);
-#endif
-                }
-                MenuManager::cleanup();
-                if (!Render::appShouldRun()) break;
-            }
+        if ((projectType == ProjectType::UNEMBEDDED || (projectType == ProjectType::UNZIPPED && Unzip::UnpackedInSD)) && Input::keyHeldDuration["1"] > 90 * (FPS / 30.0f)) {
+            pauseMenu = new PauseMenu();
+            MenuManager::changeMenu(pauseMenu);
+            return std::make_pair(true, false);
+        }
 
 #endif
 
-            if (shouldStop) {
-                if (projectType != UNEMBEDDED && !(projectType == UNZIPPED && Unzip::UnpackedInSD)) {
-                    OS::toExit = true;
-                    cleanupScratchProject();
-                    return false;
-                }
+        if (shouldStop) {
+            if (projectType != ProjectType::UNEMBEDDED && !(projectType == ProjectType::UNZIPPED && Unzip::UnpackedInSD)) {
+                OS::toExit = true;
                 cleanupScratchProject();
-                shouldStop = false;
-                return true;
+                return std::make_pair(false, false);
             }
+            cleanupScratchProject();
+            shouldStop = false;
+            return std::make_pair(false, true);
+        }
+        if (debugVars) stageSprite->variables["SE!__RenderTime"].value = Value(std::to_string(renderTimer.getTimeMsDouble()) + " ms");
+    }
+
+    return std::make_pair(true, false);
+}
+
+bool Scratch::startScratchProject() {
+    std::pair<bool, bool> code;
+
+    initializeScratchProject();
+
+    while (true) {
+        code = stepScratchProject();
+        if (!code.first) {
+            cleanupScratchProject();
+            return code.second;
         }
     }
+
     cleanupScratchProject();
     return false;
 }
@@ -152,8 +213,11 @@ void Scratch::cleanupScratchProject() {
     Render::visibleVariables.clear();
     Render::penClear();
 
+    if (Render::getSpeechManager())
+        Render::destroySpeechManager();
+
     // Clean up ZIP archive if it was initialized
-    if (projectType != UNZIPPED) {
+    if (projectType != ProjectType::UNZIPPED) {
         mz_zip_reader_end(&Unzip::zipArchive);
         Unzip::zipBuffer.clear();
         Unzip::zipBuffer.shrink_to_fit();
@@ -183,7 +247,8 @@ void Scratch::cleanupScratchProject() {
     forceRedraw = false;
     nextProject = false;
     useCustomUsername = false;
-    projectType = UNEMBEDDED;
+    sb3InRam = true;
+    projectType = ProjectType::UNEMBEDDED;
     Render::renderMode = Render::TOP_SCREEN_ONLY;
 
     Log::log("Cleaned up Scratch project.");
@@ -520,7 +585,6 @@ bool Scratch::isColliding(std::string collisionType, Sprite *currentSprite, Spri
 }
 
 void Scratch::gotoXY(Sprite *sprite, double x, double y) {
-
     if (sprite->isStage) return;
 
     const double oldX = sprite->xPosition;
@@ -534,7 +598,7 @@ void Scratch::gotoXY(Sprite *sprite, double x, double y) {
         if (accuratePen) Render::penMoveAccurate(oldX, oldY, sprite->xPosition, sprite->yPosition, sprite);
         else Render::penMoveFast(oldX, oldY, sprite->xPosition, sprite->yPosition, sprite);
     }
-    Scratch::forceRedraw = true;
+    if (sprite->visible) Scratch::forceRedraw = true;
 }
 
 void Scratch::fenceSpriteWithinBounds(Sprite *sprite) {
@@ -598,17 +662,16 @@ void Scratch::setDirection(Sprite *sprite, double direction) {
     }
 
     sprite->rotation = direction - floor((direction + 179) / 360) * 360;
-    Scratch::forceRedraw = true;
+    if (sprite->visible) Scratch::forceRedraw = true;
 }
 
 void Scratch::switchCostume(Sprite *sprite, double costumeIndex) {
-
     costumeIndex = std::round(costumeIndex);
     sprite->currentCostume = std::isfinite(costumeIndex) ? (costumeIndex - std::floor(costumeIndex / sprite->costumes.size()) * sprite->costumes.size()) : 0;
 
     loadCurrentCostumeImage(sprite);
 
-    Scratch::forceRedraw = true;
+    if (sprite->visible) Scratch::forceRedraw = true;
 }
 
 void Scratch::sortSprites() {
@@ -636,16 +699,32 @@ void Scratch::loadCurrentCostumeImage(Sprite *sprite) {
 
     std::shared_ptr<Image> image;
 
-    try {
-        if (projectType == UNZIPPED) {
-            image = createImageFromFile(costumeName, true, true);
-        } else {
-            image = createImageFromZip(costumeName, &Unzip::zipArchive, true);
+    auto onErr = [&](std::string error) {
+        static std::set<std::string> failedImages;
+        if (failedImages.count(costumeName) == 0) {
+            Log::logWarning("Failed to load image: " + costumeName + ": " + error);
+            freeUnusedCostumeImages();
+            failedImages.insert(costumeName);
         }
-    } catch (const std::runtime_error &e) {
-        Log::logWarning("Failed to load image: " + costumeName + ": " + std::string(e.what()));
-        freeUnusedCostumeImages();
-        return;
+    };
+
+    float scale = (sprite->size / 100);
+    if (sprite->renderInfo.renderScaleY != 0) scale *= sprite->renderInfo.renderScaleY;
+
+    if (projectType == ProjectType::UNZIPPED) {
+        auto imageOrErr = createImageFromFile(costumeName, true, true, scale);
+        if (!imageOrErr.has_value()) {
+            onErr(imageOrErr.error());
+            return;
+        }
+        image = imageOrErr.value();
+    } else {
+        auto imageOrErr = createImageFromZip(costumeName, Scratch::sb3InRam ? &Unzip::zipArchive : nullptr, true, scale);
+        if (!imageOrErr.has_value()) {
+            onErr(imageOrErr.error());
+            return;
+        }
+        image = imageOrErr.value();
     }
 
     if (image) {
@@ -679,11 +758,11 @@ void Scratch::freeUnusedCostumeImages() {
 }
 
 Block *Scratch::findBlock(std::string blockId, Sprite *sprite) {
-    auto block = sprite->blocks.find(blockId);
-    if (block == sprite->blocks.end()) {
+    auto block = sprite->blocksMap.find(blockId);
+    if (block == sprite->blocksMap.end()) {
         return nullptr;
     }
-    return &block->second;
+    return block->second;
 }
 
 Block *Scratch::getBlockParent(const Block *block, Sprite *sprite) {
@@ -777,4 +856,43 @@ std::vector<Value> *Scratch::getListItems(Block &block, Sprite *sprite) {
     }
     if (!targetSprite) return nullptr; // TODO: Implement list creation
     return &targetSprite->lists[listId].items;
+}
+
+void Scratch::createDebugMonitor(const std::string &name, int x, int y) {
+    Variable newVariable;
+    newVariable.id = name;
+    newVariable.name = name;
+    newVariable.value = Value(0);
+
+    stageSprite->variables[newVariable.id] = newVariable;
+
+    Monitor newMonitor;
+    newMonitor.displayName = newVariable.name;
+    newMonitor.id = newVariable.id;
+    newMonitor.opcode = "data_variable";
+    newMonitor.parameters["VARIABLE"] = newVariable.name;
+    newMonitor.visible = true;
+    newMonitor.x = x;
+    newMonitor.y = y;
+    newMonitor.spriteName = stageSprite->name;
+    newMonitor.mode = "67"; // i dont think this matters
+
+    Render::visibleVariables[newMonitor.id] = newMonitor;
+}
+
+void Scratch::toggleDebugVars(const bool enabled) {
+    if (enabled && !debugVars) {
+        createDebugMonitor("SE!__FPS", 0, 0);
+        createDebugMonitor("SE!__ScriptTime", 0, 30);
+        createDebugMonitor("SE!__RenderTime", 0, 60);
+        debugVars = true;
+    } else if (!enabled && debugVars) {
+        stageSprite->variables.erase("SE!__FPS");
+        stageSprite->variables.erase("SE!__ScriptTime");
+        stageSprite->variables.erase("SE!__RenderTime");
+        Render::visibleVariables.erase("SE!__FPS");
+        Render::visibleVariables.erase("SE!__ScriptTime");
+        Render::visibleVariables.erase("SE!__RenderTime");
+        debugVars = false;
+    }
 }

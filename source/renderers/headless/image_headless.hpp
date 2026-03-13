@@ -1,11 +1,12 @@
 #pragma once
+#include "nonstd/expected.hpp"
 #include <image.hpp>
 
 class Image_Headless : public Image {
   public:
-    Image_Headless(std::string filePath, bool fromScratchProject = true, bool bitmapHalfQuality = false);
+    Image_Headless(std::string filePath, bool fromScratchProject = true, bool bitmapHalfQuality = false, float scale = 1);
 
-    Image_Headless(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality = false);
+    Image_Headless(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality = false, float scale = 1);
 
     ~Image_Headless() override;
 
@@ -13,4 +14,6 @@ class Image_Headless : public Image {
     void renderNineslice(double xPos, double yPos, double width, double height, double padding, bool centered = false) override;
 
     void *getNativeTexture() override;
+
+    nonstd::expected<void, std::string> refreshTexture() override;
 };

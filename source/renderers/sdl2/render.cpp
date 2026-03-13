@@ -1,4 +1,5 @@
 #include "render.hpp"
+#include "speech_manager.hpp"
 #include "speech_manager_sdl2.hpp"
 #include "sprite.hpp"
 #include <SDL2/SDL.h>
@@ -19,7 +20,6 @@
 #ifdef __WIIU__
 #include <coreinit/debug.h>
 #include <nn/act.h>
-#include <romfs-wiiu.h>
 #include <whb/log_udp.h>
 #include <whb/sdcard.h>
 #endif
@@ -42,7 +42,6 @@ char nickname[0x21];
 #ifdef __OGC__
 #include <fat.h>
 #include <ogc/system.h>
-#include <romfs-ogc.h>
 #endif
 
 #ifdef __PS4__
@@ -124,7 +123,7 @@ bool Render::Init() {
         globalWindow = nullptr;
         return false;
     }
-#if defined(WEBOS) || defined(__PSP__)
+#if defined(WEBOS) || defined(__PSP__) || defined(__PS4__)
     uint32_t sdlFlags = SDL_RENDERER_ACCELERATED;
 #else
     uint32_t sdlFlags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC;
@@ -165,8 +164,17 @@ void *Render::getRenderer() {
     return static_cast<void *>(renderer);
 }
 
-SpeechManager *Render::getSpeechManager() {
+bool Render::createSpeechManager() {
     if (speechManager == nullptr) speechManager = new SpeechManagerSDL2(renderer);
+    return speechManager != nullptr;
+}
+
+void Render::destroySpeechManager() {
+    delete speechManager;
+    speechManager = nullptr;
+}
+
+SpeechManager *Render::getSpeechManager() {
     return speechManager;
 }
 
@@ -594,6 +602,7 @@ bool Render::appShouldRun() {
                 SDL_SetRenderTarget(renderer, nullptr);
                 SDL_SetTextureBlendMode(newTexture, SDL_BLENDMODE_BLEND);
                 SDL_DestroyTexture(penTexture);
+                penTexture = newTexture;
             }
         }
 

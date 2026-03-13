@@ -1,9 +1,9 @@
 #include "image_gl2d.hpp"
+#include "nonstd/expected.hpp"
 #include <stdexcept>
 #include <unzip.hpp>
 
-void Image_GL2D::setInitialTexture() {
-
+nonstd::expected<void, std::string> Image_GL2D::setInitialTexture() {
     RGBAToPAL8();
 
     const int pow2Width = Math::next_pow2(imgData.width);
@@ -29,21 +29,35 @@ void Image_GL2D::setInitialTexture() {
     textureData = nullptr;
 
     if (texID < 0) {
-        throw std::runtime_error("Failed to upload tex. " +
-                                 (texID == -1
-                                      ? std::string(" Out of VRAM!")
-                                      : " Error " + std::to_string(texID)));
+        return nonstd::make_unexpected("Failed to upload tex. " +
+                                       (texID == -1
+                                            ? std::string(" Out of VRAM!")
+                                            : " Error " + std::to_string(texID)));
     }
 
     textureID = texID;
+    return {};
 }
 
-Image_GL2D::Image_GL2D(std::string filePath, bool fromScratchProject, bool bitmapHalfQuality) : Image(filePath, fromScratchProject, bitmapHalfQuality) {
-    setInitialTexture();
+nonstd::expected<void, std::string> Image_GL2D::refreshTexture() {
+    glDeleteTextures(1, &textureID);
+    return setInitialTexture();
 }
 
-Image_GL2D::Image_GL2D(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality) : Image(filePath, zip, bitmapHalfQuality) {
-    setInitialTexture();
+Image_GL2D::Image_GL2D(std::string filePath, bool fromScratchProject, bool bitmapHalfQuality, float scale) {
+    maxTextureSize = {1024, 1024};
+    init(filePath, fromScratchProject, bitmapHalfQuality, scale);
+
+    const auto potentialError = setInitialTexture();
+    if (!potentialError.has_value()) error = potentialError.error();
+}
+
+Image_GL2D::Image_GL2D(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality, float scale) {
+    maxTextureSize = {1024, 1024};
+    init(filePath, zip, bitmapHalfQuality, scale);
+
+    const auto potentialError = setInitialTexture();
+    if (!potentialError.has_value()) error = potentialError.error();
 }
 
 Image_GL2D::~Image_GL2D() {
@@ -55,7 +69,6 @@ void *Image_GL2D::getNativeTexture() {
 }
 
 void Image_GL2D::render(ImageRenderParams &params) {
-
     int x = params.x;
     int y = params.y;
     float scale = params.scale;
@@ -79,9 +92,9 @@ void Image_GL2D::render(ImageRenderParams &params) {
 
     if (params.subrect != nullptr) {
         // TODO: implement subrects properly
-        glSpriteRotateScaleXY(x, y, rotation, renderScale, renderScale, flip_mode, &texture);
+        glSpriteRotateScaleXY(x, y, rotation, renderScale / imgData.scale, renderScale / imgData.scale, flip_mode, &texture);
     } else {
-        glSpriteRotateScaleXY(x, y, rotation, renderScale, renderScale, flip_mode, &texture);
+        glSpriteRotateScaleXY(x, y, rotation, renderScale / imgData.scale, renderScale / imgData.scale, flip_mode, &texture);
     }
 
     freeTimer = maxFreeTimer;

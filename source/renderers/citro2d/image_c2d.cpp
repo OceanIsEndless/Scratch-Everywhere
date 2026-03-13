@@ -1,4 +1,5 @@
 #include "image_c2d.hpp"
+#include "nonstd/expected.hpp"
 #include <algorithm>
 #include <math.hpp>
 #include <os.hpp>
@@ -76,7 +77,7 @@ void Image_C2D::render(ImageRenderParams &params) {
             C2D_PlainImageTint(&tinty, C2D_Color32(0, 0, 0, alpha), brightnessEffect);
     } else C2D_AlphaImageTint(&tinty, 1.0f);
 
-    C2D_DrawImageAtRotated({texture.tex, &subtex}, x, y, 1, rotation, &tinty, scaleX, scaleY);
+    C2D_DrawImageAtRotated({texture.tex, &subtex}, x, y, 1, rotation, &tinty, scaleX / imgData.scale, scaleY / imgData.scale);
     freeTimer = maxFreeTimer;
 }
 
@@ -129,11 +130,11 @@ void Image_C2D::renderNineslice(double xPos, double yPos, double width, double h
     freeTimer = maxFreeTimer;
 }
 
-void Image_C2D::setInitialTexture() {
+nonstd::expected<void, std::string> Image_C2D::setInitialTexture() {
 
     uint32_t *rgba_raw = reinterpret_cast<uint32_t *>(imgData.pixels);
-    const int texWidth = getWidth();
-    const int texHeight = getHeight();
+    const int texWidth = imgData.width;
+    const int texHeight = imgData.height;
 
     C3D_Tex *tex = new C3D_Tex();
 
@@ -155,7 +156,7 @@ void Image_C2D::setInitialTexture() {
     if (!C3D_TexInit(tex, tex->width, tex->height, GPU_RGBA8)) {
         delete tex;
         delete subtex;
-        throw std::runtime_error("Texture initializing failed!");
+        return nonstd::make_unexpected("Texture initializing failed!");
     }
 
     C3D_TexSetFilter(tex, GPU_NEAREST, GPU_LINEAR);
@@ -163,7 +164,7 @@ void Image_C2D::setInitialTexture() {
     if (!tex->data) {
         C3D_TexDelete(tex);
         delete subtex;
-        throw std::runtime_error("Texture data is null!");
+        return nonstd::make_unexpected("Texture data is null!");
     }
 
     size_t textureSize = tex->width * tex->height * 4;
@@ -185,9 +186,8 @@ void Image_C2D::setInitialTexture() {
     texture.tex = tex;
     texture.subtex = subtex;
     free(imgData.pixels);
-
-    // errr this MIGHT be risky but it seems to be fine
-    imgData.pixels = texture.tex->data;
+    imgData.pixels = nullptr;
+    return {};
 }
 
 static inline uint32_t unswizzleRGBA8(const uint32_t *swizzled, int texWidth, int x, int y) {
@@ -264,12 +264,32 @@ void *Image_C2D::getNativeTexture() {
     return &texture;
 }
 
-Image_C2D::Image_C2D(std::string filePath, bool fromScratchProject, bool bitmapHalfQuality) : Image(filePath, fromScratchProject, bitmapHalfQuality) {
-    setInitialTexture();
+nonstd::expected<void, std::string> Image_C2D::refreshTexture() {
+    if (texture.tex) {
+        C3D_TexDelete(texture.tex);
+        delete texture.tex;
+        texture.tex = nullptr;
+    }
+    if (texture.subtex) {
+        delete texture.subtex;
+    }
+    return setInitialTexture();
 }
 
-Image_C2D::Image_C2D(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality) : Image(filePath, zip, bitmapHalfQuality) {
-    setInitialTexture();
+Image_C2D::Image_C2D(std::string filePath, bool fromScratchProject, bool bitmapHalfQuality, float scale) {
+    maxTextureSize = {1024, 1024};
+    init(filePath, fromScratchProject, bitmapHalfQuality, scale);
+
+    const auto potentialError = setInitialTexture();
+    if (!potentialError.has_value()) error = potentialError.error();
+}
+
+Image_C2D::Image_C2D(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality, float scale) {
+    maxTextureSize = {1024, 1024};
+    init(filePath, zip, bitmapHalfQuality, scale);
+
+    const auto potentialError = setInitialTexture();
+    if (!potentialError.has_value()) error = potentialError.error();
 }
 
 Image_C2D::~Image_C2D() {

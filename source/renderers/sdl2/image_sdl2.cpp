@@ -1,4 +1,5 @@
 #include "image_sdl2.hpp"
+#include "nonstd/expected.hpp"
 #include "render.hpp"
 #include <algorithm>
 #include <stdexcept>
@@ -16,8 +17,8 @@ void Image_SDL2::render(ImageRenderParams &params) {
     SDL_RendererFlip flip = params.flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
 
     SDL_Rect renderRect;
-    renderRect.w = static_cast<int>(imgData.width * scale);
-    renderRect.h = static_cast<int>(imgData.height * scale);
+    renderRect.w = static_cast<int>(imgData.width / imgData.scale * scale);
+    renderRect.h = static_cast<int>(imgData.height / imgData.scale * scale);
 
     SDL_Rect subRect;
     if (params.subrect != nullptr) {
@@ -78,25 +79,24 @@ void Image_SDL2::render(ImageRenderParams &params) {
 
 // I doubt you want to mess with this...
 void Image_SDL2::renderNineslice(double xPos, double yPos, double width, double height, double padding, bool centered) {
-
     const int iDestX = static_cast<int>(xPos - (centered ? width / 2 : 0));
     const int iDestY = static_cast<int>(yPos - (centered ? height / 2 : 0));
     const int iWidth = static_cast<int>(width);
     const int iHeight = static_cast<int>(height);
-    const int iSrcPadding = std::max(1, static_cast<int>(std::min(std::min(padding, static_cast<double>(getWidth()) / 2), static_cast<double>(getHeight()) / 2)));
+    const int iSrcPadding = std::max(1, static_cast<int>(std::min(std::min(padding, static_cast<double>(imgData.width) / 2), static_cast<double>(imgData.height) / 2)));
 
-    const int srcCenterWidth = std::max(0, getWidth() - 2 * iSrcPadding);
-    const int srcCenterHeight = std::max(0, getHeight() - 2 * iSrcPadding);
+    const int srcCenterWidth = std::max(0, imgData.width - 2 * iSrcPadding);
+    const int srcCenterHeight = std::max(0, imgData.height - 2 * iSrcPadding);
 
     const SDL_Rect srcTopLeft = {0, 0, iSrcPadding, iSrcPadding};
     const SDL_Rect srcTop = {iSrcPadding, 0, srcCenterWidth, iSrcPadding};
-    const SDL_Rect srcTopRight = {getWidth() - iSrcPadding, 0, iSrcPadding, iSrcPadding};
+    const SDL_Rect srcTopRight = {imgData.width - iSrcPadding, 0, iSrcPadding, iSrcPadding};
     const SDL_Rect srcLeft = {0, iSrcPadding, iSrcPadding, srcCenterHeight};
     const SDL_Rect srcCenter = {iSrcPadding, iSrcPadding, srcCenterWidth, srcCenterHeight};
-    const SDL_Rect srcRight = {getWidth() - iSrcPadding, iSrcPadding, iSrcPadding, srcCenterHeight};
-    const SDL_Rect srcBottomLeft = {0, getHeight() - iSrcPadding, iSrcPadding, iSrcPadding};
-    const SDL_Rect srcBottom = {iSrcPadding, getHeight() - iSrcPadding, srcCenterWidth, iSrcPadding};
-    const SDL_Rect srcBottomRight = {getWidth() - iSrcPadding, getHeight() - iSrcPadding, iSrcPadding, iSrcPadding};
+    const SDL_Rect srcRight = {imgData.width - iSrcPadding, iSrcPadding, iSrcPadding, srcCenterHeight};
+    const SDL_Rect srcBottomLeft = {0, imgData.height - iSrcPadding, iSrcPadding, iSrcPadding};
+    const SDL_Rect srcBottom = {iSrcPadding, imgData.height - iSrcPadding, srcCenterWidth, iSrcPadding};
+    const SDL_Rect srcBottomRight = {imgData.width - iSrcPadding, imgData.height - iSrcPadding, iSrcPadding, iSrcPadding};
 
     const int dstCenterWidth = std::max(0, iWidth - 2 * iSrcPadding);
     const int dstCenterHeight = std::max(0, iHeight - 2 * iSrcPadding);
@@ -135,19 +135,18 @@ void *Image_SDL2::getNativeTexture() {
     return texture;
 }
 
-void Image_SDL2::setInitialTexture() {
-
+nonstd::expected<void, std::string> Image_SDL2::setInitialTexture() {
 #ifdef __PS4__ // PS4 magic to prevent white everywhere
     SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(imgData.pixels, imgData.width, imgData.height, 32, imgData.pitch, SDL_PIXELFORMAT_RGBA32);
 
     if (!surface) {
-        throw std::runtime_error("Failed to create surface: " + std::string(SDL_GetError()));
+        return nonstd::make_unexpected("Failed to create surface: " + std::string(SDL_GetError()));
     }
 
     SDL_Surface *convert = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA8888, 0);
     if (convert == NULL) {
         SDL_FreeSurface(convert);
-        throw std::runtime_error("Error converting image surface: " + std::string(SDL_GetError()));
+        return nonstd::make_unexpected("Error converting image surface: " + std::string(SDL_GetError()));
     }
 
     SDL_FreeSurface(surface);
@@ -159,30 +158,56 @@ void Image_SDL2::setInitialTexture() {
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, imgData.width, imgData.height);
 #endif
     if (!texture) {
-        throw std::runtime_error("Failed to create texture: " + std::string(SDL_GetError()));
+        return nonstd::make_unexpected("Failed to create texture: " + std::string(SDL_GetError()));
     }
 
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
 
 #ifndef __PS4__
     if (SDL_UpdateTexture(texture, nullptr, imgData.pixels, imgData.pitch) < 0) {
-        throw std::runtime_error("Failed to update texture: " + std::string(SDL_GetError()));
+        return nonstd::make_unexpected("Failed to update texture: " + std::string(SDL_GetError()));
     }
 #endif
 
     /** some platforms may need this to be freed due to RAM limits,
      *  but they then wont be able to support Image::getPixels()
      *  */
-    // free(imgData.pixels);
-    // pixels = nullptr;
+    free(imgData.pixels);
+    imgData.pixels = nullptr;
+
+    return {};
 }
 
-Image_SDL2::Image_SDL2(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality) : Image(filePath, zip, bitmapHalfQuality) {
-    setInitialTexture();
+nonstd::expected<void, std::string> Image_SDL2::refreshTexture() {
+    if (texture) {
+        SDL_DestroyTexture(texture);
+        texture = nullptr;
+    }
+    return setInitialTexture();
 }
 
-Image_SDL2::Image_SDL2(std::string filePath, bool fromScratchProject, bool bitmapHalfQuality) : Image(filePath, fromScratchProject, bitmapHalfQuality) {
-    setInitialTexture();
+Image_SDL2::Image_SDL2(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality, float scale) {
+    SDL_RendererInfo info;
+    if (SDL_GetRendererInfo(renderer, &info) == 0) {
+        maxTextureSize = {info.max_texture_width, info.max_texture_height};
+    }
+
+    init(filePath, zip, bitmapHalfQuality, scale);
+
+    const auto potentialError = setInitialTexture();
+    if (!potentialError.has_value()) error = potentialError.error();
+}
+
+Image_SDL2::Image_SDL2(std::string filePath, bool fromScratchProject, bool bitmapHalfQuality, float scale) {
+    SDL_RendererInfo info;
+    if (SDL_GetRendererInfo(renderer, &info) == 0) {
+        maxTextureSize = {info.max_texture_width, info.max_texture_height};
+    }
+
+    init(filePath, fromScratchProject, bitmapHalfQuality, scale);
+
+    const auto potentialError = setInitialTexture();
+    if (!potentialError.has_value()) error = potentialError.error();
 }
 
 Image_SDL2::~Image_SDL2() {

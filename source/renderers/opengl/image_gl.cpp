@@ -1,5 +1,7 @@
 #include "image_gl.hpp"
+#include "nonstd/expected.hpp"
 #include "render.hpp"
+#include <GL/gl.h>
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
@@ -44,8 +46,8 @@ void Image_GL::render(ImageRenderParams &params) {
     glBegin(GL_QUADS);
 
     if (params.subrect != nullptr) {
-        const float texW = static_cast<float>(getWidth());
-        const float texH = static_cast<float>(getHeight());
+        const float texW = static_cast<float>(imgData.width);
+        const float texH = static_cast<float>(imgData.height);
 
         const float u0 = params.subrect->x / texW;
         const float v0 = params.subrect->y / texH;
@@ -78,6 +80,7 @@ void Image_GL::render(ImageRenderParams &params) {
     freeTimer = maxFreeTimer;
 }
 
+// FIXME: destination width/height are used as source here...
 void Image_GL::renderNineslice(double xPos, double yPos, double width, double height, double padding, bool centered) {
     glBindTexture(GL_TEXTURE_2D, textureID);
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
@@ -149,20 +152,37 @@ void Image_GL::setInitialTexture() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, getWidth(), getHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, imgData.pixels);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imgData.width, imgData.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, imgData.pixels);
 
     /** some platforms may need this to be freed due to RAM limits,
      *  but they then wont be able to support Image::getPixels()
      *  */
-    // free(imgData.pixels);
-    // imgData.pixels = nullptr;
+    free(imgData.pixels);
+    imgData.pixels = nullptr;
 }
 
-Image_GL::Image_GL(std::string filePath, bool fromScratchProject, bool bitmapHalfQuality) : Image(filePath, fromScratchProject, bitmapHalfQuality) {
+nonstd::expected<void, std::string> Image_GL::refreshTexture() {
+    glDeleteTextures(1, &textureID);
+    setInitialTexture();
+
+    return {};
+}
+
+Image_GL::Image_GL(std::string filePath, bool fromScratchProject, bool bitmapHalfQuality, float scale) {
+    GLint glMaxTextureSize;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &glMaxTextureSize);
+    maxTextureSize = {glMaxTextureSize, glMaxTextureSize};
+
+    init(filePath, fromScratchProject, bitmapHalfQuality, scale);
     setInitialTexture();
 }
 
-Image_GL::Image_GL(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality) : Image(filePath, zip, bitmapHalfQuality) {
+Image_GL::Image_GL(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality, float scale) {
+    GLint glMaxTextureSize;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &glMaxTextureSize);
+    maxTextureSize = {glMaxTextureSize, glMaxTextureSize};
+
+    init(filePath, zip, bitmapHalfQuality, scale);
     setInitialTexture();
 }
 

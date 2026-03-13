@@ -5,13 +5,14 @@
 #include <cstddef>
 #include <image.hpp>
 #include <render.hpp>
+#include <set>
 #include <speech_manager.hpp>
 #include <sprite.hpp>
 #include <value.hpp>
 
 SCRATCH_BLOCK(looks, say) {
+    if (!Render::createSpeechManager()) return BlockResult::CONTINUE;
     SpeechManager *speechManager = Render::getSpeechManager();
-    if (!speechManager) return BlockResult::CONTINUE;
 
     Value messageValue = Scratch::getInputValue(block, "MESSAGE", sprite);
     std::string message = messageValue.asString();
@@ -21,8 +22,8 @@ SCRATCH_BLOCK(looks, say) {
     return BlockResult::CONTINUE;
 }
 SCRATCH_BLOCK(looks, sayforsecs) {
+    if (!Render::createSpeechManager()) return BlockResult::CONTINUE;
     SpeechManager *speechManager = Render::getSpeechManager();
-    if (!speechManager) return BlockResult::CONTINUE;
 
     // copied wait block functionality to hold off subsequent block execution until speech timer expires
     if (block.repeatTimes != -1 && !fromRepeat) {
@@ -55,8 +56,8 @@ SCRATCH_BLOCK(looks, sayforsecs) {
     return BlockResult::RETURN;
 }
 SCRATCH_BLOCK(looks, think) {
+    if (!Render::createSpeechManager()) return BlockResult::CONTINUE;
     SpeechManager *speechManager = Render::getSpeechManager();
-    if (!speechManager) return BlockResult::CONTINUE;
 
     Value messageValue = Scratch::getInputValue(block, "MESSAGE", sprite);
     std::string message = messageValue.asString();
@@ -66,8 +67,8 @@ SCRATCH_BLOCK(looks, think) {
     return BlockResult::CONTINUE;
 }
 SCRATCH_BLOCK(looks, thinkforsecs) {
+    if (!Render::createSpeechManager()) return BlockResult::CONTINUE;
     SpeechManager *speechManager = Render::getSpeechManager();
-    if (!speechManager) return BlockResult::CONTINUE;
 
     // copied wait block functionality to hold off subsequent block execution until speech timer expires
     if (block.repeatTimes != -1 && !fromRepeat) {
@@ -225,7 +226,7 @@ SCRATCH_BLOCK(looks, switchbackdroptoandwait) {
     end:
         const std::string finalBackdrop = Scratch::stageSprite->costumes[Scratch::stageSprite->currentCostume].name;
         for (Sprite *spr : Scratch::sprites) {
-            for (auto &[id, hat_block] : spr->blocks) {
+            for (auto &hat_block : spr->blocks) {
                 if (hat_block.opcode == "event_whenbackdropswitchesto" && Scratch::getFieldValue(hat_block, "BACKDROP") == finalBackdrop) {
                     Scratch::backdropQueue.push_back(finalBackdrop);
                     BlockExecutor::addToRepeatQueue(sprite, &block);
@@ -331,9 +332,22 @@ SCRATCH_BLOCK(looks, gotofrontback) {
 SCRATCH_BLOCK(looks, setsizeto) {
     const Value value = Scratch::getInputValue(block, "SIZE", sprite);
 
+    const auto &costumeName = sprite->costumes[sprite->currentCostume].fullName;
+    auto imgFind = Scratch::costumeImages.find(costumeName);
+    if (imgFind == Scratch::costumeImages.end()) {
+        static std::set<std::string> failedCostumes;
+        if (failedCostumes.count(costumeName) == 0) {
+            Log::logWarning("Invalid Image in current costume.");
+            failedCostumes.insert(costumeName);
+        }
+        return BlockResult::CONTINUE;
+    }
+
     // hasn't been rendered yet, or fencing is disabled
     if ((sprite->spriteWidth < 1 || sprite->spriteHeight < 1) || !Scratch::fencing) {
         sprite->size = value.asDouble();
+
+        Render::resizeSVGs(sprite);
         return BlockResult::CONTINUE;
     }
 
@@ -349,17 +363,32 @@ SCRATCH_BLOCK(looks, setsizeto) {
 
         const double clampedScale = std::clamp(inputSizePercent / 100.0, minScale, maxScale);
         sprite->size = clampedScale * 100.0;
+
+        Render::resizeSVGs(sprite);
     }
-    Scratch::forceRedraw = true;
+    if (sprite->visible) Scratch::forceRedraw = true;
     return BlockResult::CONTINUE;
 }
 
 SCRATCH_BLOCK(looks, changesizeby) {
     const Value value = Scratch::getInputValue(block, "CHANGE", sprite);
 
+    const auto &costumeName = sprite->costumes[sprite->currentCostume].fullName;
+    auto imgFind = Scratch::costumeImages.find(costumeName);
+    if (imgFind == Scratch::costumeImages.end()) {
+        static std::set<std::string> failedCostumes;
+        if (failedCostumes.count(costumeName) == 0) {
+            Log::logWarning("Invalid Image in current costume.");
+            failedCostumes.insert(costumeName);
+        }
+        return BlockResult::CONTINUE;
+    }
+
     // hasn't been rendered yet, or fencing is disabled
     if ((sprite->spriteWidth < 1 || sprite->spriteHeight < 1) || !Scratch::fencing) {
         sprite->size += value.asDouble();
+
+        Render::resizeSVGs(sprite);
         return BlockResult::CONTINUE;
     }
 
@@ -374,8 +403,10 @@ SCRATCH_BLOCK(looks, changesizeby) {
         const double maxScale = std::min((1.5 * Scratch::projectWidth) / sprWidth, (1.5 * Scratch::projectHeight) / sprHeight) * 100.0;
 
         sprite->size = std::clamp(static_cast<double>(sprite->size), minScale, maxScale);
+
+        Render::resizeSVGs(sprite);
     }
-    Scratch::forceRedraw = true;
+    if (sprite->visible) Scratch::forceRedraw = true;
     return BlockResult::CONTINUE;
 }
 
@@ -387,22 +418,42 @@ SCRATCH_BLOCK(looks, seteffectto) {
     if (!amount.isNumeric()) return BlockResult::CONTINUE;
 
     if (effect == "COLOR") {
-        // doable....
+        static bool logged = false;
+        if (!logged) {
+            Log::logWarning("Color effect is not supported yet.");
+            logged = true;
+        }
     } else if (effect == "FISHEYE") {
-        // blehhh
+        static bool logged = false;
+        if (!logged) {
+            Log::logWarning("Fisheye effect is not supported yet.");
+            logged = true;
+        }
     } else if (effect == "WHIRL") {
-        // blehhh
+        static bool logged = false;
+        if (!logged) {
+            Log::logWarning("Whirl effect is not supported yet.");
+            logged = true;
+        }
     } else if (effect == "PIXELATE") {
-        // blehhh
+        static bool logged = false;
+        if (!logged) {
+            Log::logWarning("Pixelate effect is not supported yet.");
+            logged = true;
+        }
     } else if (effect == "MOSAIC") {
-        // blehhh
+        static bool logged = false;
+        if (!logged) {
+            Log::logWarning("Mosaic effect is not supported yet.");
+            logged = true;
+        }
     } else if (effect == "BRIGHTNESS") {
         sprite->brightnessEffect = std::clamp(amount.asDouble(), -100.0, 100.0);
     } else if (effect == "GHOST") {
         sprite->ghostEffect = std::clamp(amount.asDouble(), 0.0, 100.0);
     }
 
-    Scratch::forceRedraw = true;
+    if (sprite->visible) Scratch::forceRedraw = true;
     return BlockResult::CONTINUE;
 }
 SCRATCH_BLOCK(looks, changeeffectby) {
@@ -413,15 +464,15 @@ SCRATCH_BLOCK(looks, changeeffectby) {
     if (!amount.isNumeric()) return BlockResult::CONTINUE;
 
     if (effect == "COLOR") {
-        // doable....
+        Log::logWarning("Color effect is not supported yet.");
     } else if (effect == "FISHEYE") {
-        // blehhh
+        Log::logWarning("Fisheye effect is not supported yet.");
     } else if (effect == "WHIRL") {
-        // blehhh
+        Log::logWarning("Whirl effect is not supported yet.");
     } else if (effect == "PIXELATE") {
-        // blehhh
+        Log::logWarning("Pixelate effect is not supported yet.");
     } else if (effect == "MOSAIC") {
-        // blehhh
+        Log::logWarning("Mosaic effect is not supported yet.");
     } else if (effect == "BRIGHTNESS") {
         sprite->brightnessEffect += amount.asDouble();
         sprite->brightnessEffect = std::clamp(sprite->brightnessEffect, -100.0f, 100.0f);
@@ -430,7 +481,7 @@ SCRATCH_BLOCK(looks, changeeffectby) {
         sprite->ghostEffect = std::clamp(sprite->ghostEffect, 0.0f, 100.0f);
     }
 
-    Scratch::forceRedraw = true;
+    if (sprite->visible) Scratch::forceRedraw = true;
     return BlockResult::CONTINUE;
 }
 
@@ -439,7 +490,7 @@ SCRATCH_BLOCK(looks, cleargraphiceffects) {
     sprite->colorEffect = 0.0f;
     sprite->brightnessEffect = 0.0f;
 
-    Scratch::forceRedraw = true;
+    if (sprite->visible) Scratch::forceRedraw = true;
     return BlockResult::CONTINUE;
 }
 

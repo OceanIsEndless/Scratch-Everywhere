@@ -31,17 +31,13 @@ static bool initApp() {
     if (!Render::Init()) {
         return false;
     }
-    if (!Image::Init()) {
-        // Maybe this should just be ignored since unlike the renderer this won't break the app?
-        return false;
-    }
     return true;
 }
 
 bool activateMainMenu() {
 #ifdef ENABLE_MENU
     MainMenu *menu = new MainMenu();
-    MenuManager::changeMenu(menu);
+    if (Unzip::filePath.empty()) MenuManager::changeMenu(menu);
 
     while (Render::appShouldRun()) {
         MenuManager::render();

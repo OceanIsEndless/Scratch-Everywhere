@@ -1,4 +1,6 @@
 #pragma once
+#include "nonstd/expected.hpp"
+#include "os.hpp"
 #include <chrono>
 #include <input.hpp>
 #include <math.hpp>
@@ -28,9 +30,19 @@ class Render {
     static void *getRenderer();
 
     /**
+     * Creates a global speech manager instance.
+     */
+    static bool createSpeechManager();
+
+    /**
      * Returns the speech manager instance.
      */
     static SpeechManager *getSpeechManager();
+
+    /**
+     * Destroys the global speech manager instance.
+     */
+    static void destroySpeechManager();
 
     /**
      * Begins a drawing frame.
@@ -183,6 +195,31 @@ class Render {
                                static_cast<float>(screenHeight) / Scratch::projectHeight);
         if (renderMode == BOTH_SCREENS) renderScale = 1.0f;
         forceUpdateSpritePosition();
+    }
+
+    /**
+     * Resizes every SVG costume that is currently loaded.
+     */
+    static void resizeSVGs() {
+        for (auto &sprite : Scratch::sprites) {
+            resizeSVGs(sprite);
+        }
+    }
+
+    /**
+     * Resizes every SVG costume in a given that is currently loaded.
+     */
+    static void resizeSVGs(Sprite *sprite) {
+        for (auto &costume : sprite->costumes) {
+            auto imgFind = Scratch::costumeImages.find(costume.fullName);
+            if (imgFind == Scratch::costumeImages.end()) continue;
+
+            float scale = sprite->size / 100;
+            if (sprite->renderInfo.renderScaleY != 0) scale *= sprite->renderInfo.renderScaleY;
+
+            auto potentialError = imgFind->second->resizeSVG(scale);
+            if (!potentialError.has_value()) Log::logWarning("Error resizing SVG: " + costume.id);
+        }
     }
 
     /**

@@ -1,4 +1,5 @@
 #pragma once
+#include "nonstd/expected.hpp"
 #include <gl2d.h>
 #include <image.hpp>
 #include <nds.h>
@@ -6,7 +7,7 @@
 
 class Image_GL2D : public Image {
   private:
-    void setInitialTexture();
+    nonstd::expected<void, std::string> setInitialTexture();
     void RGBAToPAL8();
     void *resizeRGBAImage(uint16_t newWidth, uint16_t newHeight);
 
@@ -21,9 +22,9 @@ class Image_GL2D : public Image {
     int textureID;
     glImage texture;
 
-    Image_GL2D(std::string filePath, bool fromScratchProject = true, bool bitmapHalfQuality = false);
+    Image_GL2D(std::string filePath, bool fromScratchProject = true, bool bitmapHalfQuality = false, float scale = 1);
 
-    Image_GL2D(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality = false);
+    Image_GL2D(std::string filePath, mz_zip_archive *zip, bool bitmapHalfQuality = false, float scale = 1);
 
     ~Image_GL2D() override;
 
@@ -33,4 +34,6 @@ class Image_GL2D : public Image {
     void renderNineslice(double xPos, double yPos, double width, double height, double padding, bool centered = false) override;
 
     void *getNativeTexture() override;
+
+    nonstd::expected<void, std::string> refreshTexture() override;
 };
